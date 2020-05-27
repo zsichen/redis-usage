@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	pb "github.com/cheggaaa/pb/v3"
-	"github.com/go-redis/redis"
 	"log"
 	"sort"
 	"strings"
 	"time"
+
+	pb "github.com/cheggaaa/pb/v3"
+	"github.com/go-redis/redis"
 )
 
 var (
@@ -108,48 +109,54 @@ func main() {
 	}
 	bar := pb.StartNew(dbsize)
 
-	// Read keys
-	cursor := uint64(0)
-	var err error
-	var keys []string
-
 	prefixes = prefixItems{}
 
-	for {
-		keys, cursor, err = client.Scan(cursor, flagMatch, int64(flagCount)).Result()
-		check(err)
+	keysCh := make(chan []string, 10000)
 
+	go func() {
+		// Read keys
+		defer close(keysCh)
+
+		cursor := uint64(0)
+		var err error
+		var keys []string
+		for {
+			keys, cursor, err = client.Scan(cursor, flagMatch, int64(flagCount)).Result()
+			check(err)
+			keysCh <- keys
+			bar.Add(len(keys))
+
+			if cursor == 0 {
+				break
+			}
+
+			if flagLimit > 0 && bar.Current() >= int64(flagLimit) {
+				break
+			}
+
+			if flagSleep > 0 {
+				time.Sleep(time.Duration(flagSleep) * time.Millisecond)
+			}
+		}
+	}()
+
+	for keys := range keysCh {
 		for _, key := range keys {
 			prefix := getPrefix(key)
-
+			fmt.Println("Match:", key)
 			if _, ok := prefixes[prefix]; !ok {
 				prefixes[prefix] = &prefixItem{}
 			}
 
 			prefixes[prefix].prefix = prefix
-			prefixes[prefix].count += 1
+			prefixes[prefix].count++
 
 			if prefixes[prefix].numberOfDumps < flagDumpLimit {
 				result, err := client.Dump(key).Result()
 				check(err)
-
 				prefixes[prefix].totalBytes += len(result)
-				prefixes[prefix].numberOfDumps += 1
+				prefixes[prefix].numberOfDumps++
 			}
-		}
-
-		bar.Add(len(keys))
-
-		if cursor == 0 {
-			break
-		}
-
-		if flagLimit > 0 && bar.Current() >= int64(flagLimit) {
-			break
-		}
-
-		if flagSleep > 0 {
-			time.Sleep(time.Duration(flagSleep) * time.Millisecond)
 		}
 	}
 
