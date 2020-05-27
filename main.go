@@ -3,18 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
+	pb "github.com/cheggaaa/pb/v3"
 	"github.com/go-redis/redis"
 	"log"
-	"gopkg.in/cheggaaa/pb.v1"
+	"sort"
 	"strings"
 	"time"
-	"sort"
 )
 
 var (
 	flagHost      string
 	flagPort      int
-    flagPassword  string
+	flagPassword  string
 	flagDB        int
 	flagMatch     string
 	flagCount     int
@@ -79,12 +79,12 @@ func formatSize(size int64) string {
 	switch {
 	case size < 1024:
 		return fmt.Sprintf("%d bytes", size)
-	case size < 1024 * 1024:
-		return fmt.Sprintf("%.3g KB", float64(size) / 1024)
-	case size < 1024 * 1024 * 1024:
-		return fmt.Sprintf("%.3g MB", float64(size) / (1024 * 1024))
+	case size < 1024*1024:
+		return fmt.Sprintf("%.3g KB", float64(size)/1024)
+	case size < 1024*1024*1024:
+		return fmt.Sprintf("%.3g MB", float64(size)/(1024*1024))
 	default:
-		return fmt.Sprintf("%.3g GB", float64(size) / (1024 * 1024 * 1024))
+		return fmt.Sprintf("%.3g GB", float64(size)/(1024*1024*1024))
 	}
 }
 
@@ -141,11 +141,11 @@ func main() {
 		bar.Add(len(keys))
 
 		if cursor == 0 {
-			break;
+			break
 		}
 
-		if flagLimit > 0 && bar.Get() >= int64(flagLimit) {
-			break;
+		if flagLimit > 0 && bar.Current() >= int64(flagLimit) {
+			break
 		}
 
 		if flagSleep > 0 {
@@ -156,11 +156,11 @@ func main() {
 	// Since the number of items returned from a cursor is up to the count it's
 	// possible for the progress bar position to be greater than the total (when
 	// using -limit). So just neatly adjust for that...
-	if bar.Get() > bar.Total {
-		bar.SetTotal64(bar.Get())
+	if bar.Current() > bar.Total() {
+		bar.SetTotal(bar.Current())
 	}
 
-	bar.FinishPrint("")
+	bar.Finish()
 
 	printResults()
 }
@@ -172,7 +172,7 @@ func printResults() {
 
 	for i, data := range prefixes.sortedSlice() {
 		if flagTop > 0 && i >= flagTop {
-			break;
+			break
 		}
 
 		if data.numberOfDumps > 0 {
@@ -221,7 +221,7 @@ func newClient() *redis.Client {
 
 	return redis.NewClient(&redis.Options{
 		Addr:        addr,
-        Password:    flagPassword,
+		Password:    flagPassword,
 		DB:          flagDB,
 		ReadTimeout: time.Duration(flagTimeout) * time.Millisecond,
 	})
@@ -234,11 +234,11 @@ func parseCLIArgs() {
 	flag.IntVar(&flagDB, "db", 0, "Redis server database.")
 	flag.StringVar(&flagMatch, "match", "", "SCAN MATCH option.")
 	flag.IntVar(&flagCount, "count", 10, "SCAN COUNT option.")
-	flag.IntVar(&flagSleep, "sleep", 0, "Number of milliseconds to wait " +
+	flag.IntVar(&flagSleep, "sleep", 0, "Number of milliseconds to wait "+
 		"between reading keys.")
 	flag.IntVar(&flagLimit, "limit", 0, "Limit the number of keys scanned.")
 	flag.IntVar(&flagTop, "top", 0, "Only show the top number of prefixes.")
-	flag.StringVar(&flagPrefixes, "prefixes", "", "You may specify custom " +
+	flag.StringVar(&flagPrefixes, "prefixes", "", "You may specify custom "+
 		"prefixes (comma-separated).")
 	flag.IntVar(&flagDumpLimit, "dump-limit", 0, "Use DUMP to get key sizes "+
 		"(much slower). If this is zero then DUMP will not be used, "+
